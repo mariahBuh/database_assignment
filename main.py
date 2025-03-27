@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
+import base64
 
 # Creating FastAPI instance
 app = FastAPI()
@@ -68,3 +69,60 @@ async def add_score(score: PlayerScore):
         return {"message": "Score recorded", "id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Insert failed")
+    
+
+################################## Retrieve data from MongoDB ##################################
+ 
+# Retrieve all uploaded sprite files from the 'sprites' collection.
+# Each sprite includes a filename and a base64-encoded version of its binary content.
+@app.get("/sprites")
+async def get_sprites():
+    try:
+        sprites = []
+        cursor = db.sprites.find()
+        async for doc in cursor:
+            doc["_id"] = str(doc["_id"]) # Convert ObjectId to string for JSON serialization
+            if "content" in doc:
+                # Encode binary content to base64 string for JSON response
+                doc["content"] = base64.b64encode(doc["content"]).decode("utf-8")
+            sprites.append(doc)
+        return sprites
+    except Exception as e:
+         # Log error and return internal server error
+        import traceback
+        print("ERROR in /sprites:", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Sprite retrieval failed")
+
+# Retrieve all uploaded audio files from the 'audio_files' collection.
+# Each audio includes a filename and a base64-encoded version of its binary content.
+@app.get("/audios")
+async def get_audios():
+    try:
+        audios = []
+        cursor = db.audio_files.find()
+        async for doc in cursor:
+            doc["_id"] = str(doc["_id"]) # Convert ObjectId to string for JSON serialization
+
+            if "content" in doc:
+                # Encode binary content to base64 string for JSON response
+                doc["content"] = base64.b64encode(doc["content"]).decode("utf-8")
+            audios.append(doc)
+        return audios
+    except Exception as e:
+        # Log error and return internal server error
+        import traceback
+        print("ERROR in /audios:", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Audio retrieval failed")
+
+# Retrieve all player scores from the 'scores' collection.
+# Each record includes the player's ID and their score value.
+@app.get("/scores")
+async def get_scores():
+    scores = []
+    cursor = db.scores.find()
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])  # Convert ObjectId to string
+        scores.append(doc)
+    return scores
