@@ -30,7 +30,6 @@ Allowed_Audio_Extentions = {".mp3", ".wav", ".ogg"}
 def validate_file_upload(file: UploadFile, allowed_extensions: set):
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()
-
     # Check if the file extension is allowed
     if not ext or ext not in allowed_extensions:
         raise HTTPException(
@@ -38,6 +37,11 @@ def validate_file_upload(file: UploadFile, allowed_extensions: set):
             detail=f"Invalid file type: {ext}. Allowed types are: {', '.join(allowed_extensions)}"
         )
 
+
+# Root endpoint to confirm the API is running
+@app.get("/")
+async def root():
+    return {"message": "Server is running!"}
 
 # Pydantic model for validating player score input (Preventing SQL Injection)
 class PlayerScore(BaseModel):
@@ -48,8 +52,6 @@ class PlayerScore(BaseModel):
     # Block dangerous characters (like $ or .)
     @field_validator("player_id")
     def no_special_chars(cls, v):
-
-        # Check if the player_id contains only alphanumeric characters, underscores, spaces, or hyphens
         if not re.match("^[a-zA-Z0-9_ -]+$", v):
             raise ValueError("Player ID contains invalid characters")
         return v
@@ -64,7 +66,6 @@ async def upload_sprite(file: UploadFile = File(...)):
     The file content is saved in binary along with its original filename."""
 
     try:
-        # Validate the file extension using the allowed extensions set
         validate_file_upload(file, Allowed_Image_Extentions)
 
         content = await file.read()
@@ -75,12 +76,12 @@ async def upload_sprite(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Upload failed")
 
 # Endpoint to upload an audio file to the 'audio_files' collection
+
 @app.post("/upload_audio")
 async def upload_audio(file: UploadFile = File(...)):
     """Accepts an audio file via form-data and stores it in the MongoDB 'audio_files' collection.
     The file content is saved in binary format along with its filename."""
     try:
-        # Validate the file extension using the allowed extensions set
         validate_file_upload(file, Allowed_Audio_Extentions)
 
         content = await file.read()
