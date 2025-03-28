@@ -1,5 +1,7 @@
+# Imports Required Libraries
 from fastapi import FastAPI, HTTPException, File, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+import re
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
@@ -20,15 +22,40 @@ MONGO_URI = f"mongodb+srv://{username}:{password}@dbe.t4lj7.mongodb.net/game_db?
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = client.game_db
 
-# Root endpoint to confirm the API is running
-@app.get("/")
-async def root():
-    return {"message": "Server is running!"}
+# Allowed extensions for image and audio files
+Allowed_Image_Extentions = {".png", ".jpg", ".jpeg", ".gif"}
+Allowed_Audio_Extentions = {".mp3", ".wav", ".ogg"}
 
-# Pydantic model for validating player score input
+# Adding code to prevent SQL Injections for the file extensions
+def validate_file_upload(file: UploadFile, allowed_extensions: set):
+    filename = file.filename
+    ext = os.path.splitext(filename)[1].lower()
+
+    # Check if the file extension is allowed
+    if not ext or ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {ext}. Allowed types are: {', '.join(allowed_extensions)}"
+        )
+
+
+# Pydantic model for validating player score input (Preventing SQL Injection)
 class PlayerScore(BaseModel):
-    player_id: str  # Unique identifier for the player
-    score: int # Score achieved by the player
+    player_id: str   = Field(..., min_length=1, max_length=50) # Unique identifier for the player
+    score: int = Field(..., ge=0) # Score achieved by the player
+
+    
+    # Block dangerous characters (like $ or .)
+    @field_validator("player_id")
+    def no_special_chars(cls, v):
+
+        # Check if the player_id contains only alphanumeric characters, underscores, spaces, or hyphens
+        if not re.match("^[a-zA-Z0-9_ -]+$", v):
+            raise ValueError("Player ID contains invalid characters")
+        return v
+
+    class Config:
+        extra = "forbid"  #Blocks extra unexpected fields
 
 # Endpoint to upload a sprite file to the 'sprites' collection
 @app.post("/upload_sprite")
@@ -37,6 +64,9 @@ async def upload_sprite(file: UploadFile = File(...)):
     The file content is saved in binary along with its original filename."""
 
     try:
+        # Validate the file extension using the allowed extensions set
+        validate_file_upload(file, Allowed_Image_Extentions)
+
         content = await file.read()
         sprite_doc = {"filename": file.filename, "content": content}
         result = await db.sprites.insert_one(sprite_doc)
@@ -45,12 +75,14 @@ async def upload_sprite(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Upload failed")
 
 # Endpoint to upload an audio file to the 'audio_files' collection
-
 @app.post("/upload_audio")
 async def upload_audio(file: UploadFile = File(...)):
     """Accepts an audio file via form-data and stores it in the MongoDB 'audio_files' collection.
     The file content is saved in binary format along with its filename."""
     try:
+        # Validate the file extension using the allowed extensions set
+        validate_file_upload(file, Allowed_Audio_Extentions)
+
         content = await file.read()
         audio_doc = {"filename": file.filename, "content": content}
         result = await db.audio_files.insert_one(audio_doc)
